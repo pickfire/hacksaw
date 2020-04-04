@@ -17,6 +17,18 @@ fn min_max(a: i16, b: i16) -> (i16, i16) {
     }
 }
 
+fn build_border(rect: xcb::Rectangle, line_width: u16) -> [xcb::Rectangle; 4] {
+    let right_x = rect.x() + rect.width() as i16 - line_width as i16;
+    let bottom_y = rect.y() + rect.height() as i16 - line_width as i16;
+    // top, right, bottom, left
+    [
+        xcb::Rectangle::new(rect.x(), rect.y(), rect.width(), line_width),
+        xcb::Rectangle::new(right_x, rect.y(), line_width, rect.height()),
+        xcb::Rectangle::new(rect.x(), bottom_y, rect.width(), line_width),
+        xcb::Rectangle::new(rect.x(), rect.y(), line_width, rect.height()),
+    ]
+}
+
 fn build_guides(screen: xcb::Rectangle, pt: xcb::Point, width: u16) -> [xcb::Rectangle; 2] {
     [
         xcb::Rectangle::new(
@@ -95,15 +107,20 @@ fn main() -> Result<(), String> {
 
     if !opt.no_guides {
         let pointer = xcb::query_pointer(&conn, root).get_reply().unwrap();
-        set_shape(
-            &conn,
-            window,
-            &build_guides(
-                screen_rect,
-                xcb::Point::new(pointer.root_x(), pointer.root_y()),
-                guide_width,
-            ),
-        );
+        let pointer = xcb::Point::new(pointer.root_x(), pointer.root_y());
+        let result =
+            get_window_at_point(&conn, root, pointer, opt.remove_decorations, Some(window));
+        let guides = build_guides(screen_rect, pointer, guide_width);
+        if let Some(result) = result {
+            let borders = build_border(result.rect, line_width);
+            let mut rects = guides.to_vec();
+            rects.extend_from_slice(&borders);
+            set_shape(&conn, window, &rects);
+        } else {
+            set_shape(&conn, window, &guides);
+        }
+
+        conn.flush();
     }
 
     conn.flush();
@@ -148,11 +165,22 @@ fn main() -> Result<(), String> {
                 let width = (right_x - left_x) as u16;
                 let height = (bottom_y - top_y) as u16;
 
+                let cursor_pt = xcb::Point::new(motion.event_x(), motion.event_y());
+                let result = get_window_at_point(
+                    &conn,
+                    root,
+                    cursor_pt,
+                    opt.remove_decorations,
+                    Some(window),
+                );
+
                 // only save the width and height if we are selecting a
                 // rectangle, since we then use these (non-zero width/height)
                 // to determine if a selection was made.
                 if in_selection {
                     selection = xcb::Rectangle::new(left_x, top_y, width, height);
+                } else if let Some(HacksawResult { rect, .. }) = result {
+                    selection = rect;
                 } else {
                     selection = xcb::Rectangle::new(left_x, top_y, 0, 0);
                 }
@@ -182,13 +210,22 @@ fn main() -> Result<(), String> {
                     ];
                     set_shape(&conn, window, &rects);
                 } else if !opt.no_guides {
-                    let rects = build_guides(
-                        screen_rect,
-                        xcb::Point::new(motion.event_x(), motion.event_y()),
-                        guide_width,
+                    let result = get_window_at_point(
+                        &conn,
+                        root,
+                        cursor_pt,
+                        opt.remove_decorations,
+                        Some(window),
                     );
-
-                    set_shape(&conn, window, &rects);
+                    let guides = build_guides(screen_rect, cursor_pt, guide_width);
+                    if let Some(result) = result {
+                        let borders = build_border(result.rect, line_width);
+                        let mut rects = guides.to_vec();
+                        rects.extend_from_slice(&borders);
+                        set_shape(&conn, window, &rects);
+                    } else {
+                        set_shape(&conn, window, &guides);
+                    }
                 }
 
                 conn.flush();
@@ -236,7 +273,7 @@ fn main() -> Result<(), String> {
     let result;
     if selection.width() == 0 && selection.height() == 0 {
         // Grab window under cursor
-        result = match get_window_at_point(&conn, root, start_pt, opt.remove_decorations) {
+        result = match get_window_at_point(&conn, root, start_pt, opt.remove_decorations, None) {
             Some(r) => r,
             None => get_window_geom(&conn, screen.root()),
         }
