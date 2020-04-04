@@ -211,13 +211,6 @@ fn main() -> Result<(), String> {
                     ];
                     set_shape(&conn, window, &rects);
                 } else if !opt.no_guides {
-                    let result = get_window_at_point(
-                        &conn,
-                        root,
-                        cursor_pt,
-                        opt.remove_decorations,
-                        Some(window),
-                    );
                     let guides = build_guides(screen_rect, cursor_pt, guide_width);
                     if let Some(result) = result {
                         let borders = build_border(result.rect, line_width);
