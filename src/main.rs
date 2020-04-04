@@ -113,8 +113,9 @@ fn main() -> Result<(), String> {
         let guides = build_guides(screen_rect, pointer, guide_width);
         if let Some(result) = result {
             let borders = build_border(result.rect, line_width);
-            let mut rects = guides.to_vec();
-            rects.extend_from_slice(&borders);
+            let rects = [
+                guides[0], guides[1], borders[0], borders[1], borders[2], borders[3],
+            ];
             set_shape(&conn, window, &rects);
         } else {
             set_shape(&conn, window, &guides);
@@ -220,8 +221,9 @@ fn main() -> Result<(), String> {
                     let guides = build_guides(screen_rect, cursor_pt, guide_width);
                     if let Some(result) = result {
                         let borders = build_border(result.rect, line_width);
-                        let mut rects = guides.to_vec();
-                        rects.extend_from_slice(&borders);
+                        let rects = [
+                            guides[0], guides[1], borders[0], borders[1], borders[2], borders[3],
+                        ];
                         set_shape(&conn, window, &rects);
                     } else {
                         set_shape(&conn, window, &guides);
