@@ -214,7 +214,7 @@ pub fn get_window_at_point(
         .iter()
         .filter(|&child| viewable(conn, *child))
         .filter(|&child| input_output(conn, *child))
-        .filter(|&child| ignore_window.map_or(true, |window| *child != window))
+        .filter(|&child| Some(*child) != ignore_window)
         .filter_map(|&child| {
             let geom = get_window_geom(conn, child);
             if geom.contains(pt) {
