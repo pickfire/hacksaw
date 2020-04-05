@@ -105,23 +105,28 @@ fn main() -> Result<(), String> {
 
     xcb::map_window(&conn, window);
 
-    if !opt.no_guides {
+    // TODO refactor this out, should be similar to the one used below
+    {
         let pointer = xcb::query_pointer(&conn, root).get_reply().unwrap();
         let pointer = xcb::Point::new(pointer.root_x(), pointer.root_y());
-        let result =
-            get_window_at_point(&conn, root, pointer, opt.remove_decorations, Some(window));
-        let guides = build_guides(screen_rect, pointer, guide_width);
-        if let Some(result) = result {
-            let borders = build_border(result.rect, line_width);
-            let rects = [
-                guides[0], guides[1], borders[0], borders[1], borders[2], borders[3],
-            ];
-            set_shape(&conn, window, &rects);
-        } else {
-            set_shape(&conn, window, &guides);
-        }
 
-        conn.flush();
+        let borders =
+            get_window_at_point(&conn, root, pointer, opt.remove_decorations, Some(window))
+                .map(|result| build_border(result.rect, line_width));
+
+        if !opt.no_guides {
+            let guides = build_guides(screen_rect, pointer, guide_width);
+            if let Some(borders) = borders {
+                let rects = [
+                    guides[0], guides[1], borders[0], borders[1], borders[2], borders[3],
+                ];
+                set_shape(&conn, window, &rects);
+            } else {
+                set_shape(&conn, window, &guides);
+            }
+        } else if let Some(borders) = borders {
+            set_shape(&conn, window, &borders);
+        }
     }
 
     conn.flush();
@@ -167,21 +172,21 @@ fn main() -> Result<(), String> {
                 let height = (bottom_y - top_y) as u16;
 
                 let cursor_pt = xcb::Point::new(motion.event_x(), motion.event_y());
-                let result = get_window_at_point(
+                // TODO cache windows
+                let borders = get_window_at_point(
                     &conn,
                     root,
                     cursor_pt,
                     opt.remove_decorations,
                     Some(window),
-                );
+                )
+                .map(|result| build_border(result.rect, line_width));
 
                 // only save the width and height if we are selecting a
                 // rectangle, since we then use these (non-zero width/height)
                 // to determine if a selection was made.
                 if in_selection {
                     selection = xcb::Rectangle::new(left_x, top_y, width, height);
-                } else if let Some(HacksawResult { rect, .. }) = result {
-                    selection = rect;
                 } else {
                     selection = xcb::Rectangle::new(left_x, top_y, 0, 0);
                 }
@@ -212,8 +217,7 @@ fn main() -> Result<(), String> {
                     set_shape(&conn, window, &rects);
                 } else if !opt.no_guides {
                     let guides = build_guides(screen_rect, cursor_pt, guide_width);
-                    if let Some(result) = result {
-                        let borders = build_border(result.rect, line_width);
+                    if let Some(borders) = borders {
                         let rects = [
                             guides[0], guides[1], borders[0], borders[1], borders[2], borders[3],
                         ];
@@ -221,6 +225,8 @@ fn main() -> Result<(), String> {
                     } else {
                         set_shape(&conn, window, &guides);
                     }
+                } else if let Some(borders) = borders {
+                    set_shape(&conn, window, &borders);
                 }
 
                 conn.flush();
