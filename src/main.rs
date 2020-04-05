@@ -137,7 +137,6 @@ fn main() -> Result<(), String> {
     let mut in_selection = false;
     let mut ignore_next_release = false;
 
-    // TODO draw rectangle around window under cursor
     loop {
         let ev = conn
             .wait_for_event()
